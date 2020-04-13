@@ -69,7 +69,8 @@ SnakeApp::SnakeApp()
 void SnakeApp::setup() {
   cinder::gl::enableDepthWrite();
   cinder::gl::enableDepthRead();
-  last_time_color_ = system_clock::now();
+  last_color_time_ = system_clock::now();
+  last_color_ = {0, 1, 0};
 }
 
 void SnakeApp::update() {
@@ -220,16 +221,21 @@ void SnakeApp::DrawSnake() const {
 }
 
 void SnakeApp::DrawFood() {
-  cinder::gl::color(0, 1, 0);
   const auto time = system_clock::now();
 
-  if (time - last_time_color_ > std::chrono::seconds(1)) {
+  if (time - last_color_time_ > std::chrono::seconds(1 / engine_.GetScore())) {
     std::random_device rd;
     std::default_random_engine engine(rd());
     std::uniform_int_distribution<> uniform_dist(0, 1);
 
-    cinder::gl::color(uniform_dist(engine), uniform_dist(engine), uniform_dist(engine));
-    last_time_color_ = time;
+    last_color_[0] = uniform_dist(engine);
+    last_color_[1] = uniform_dist(engine);
+    last_color_[2] = uniform_dist(engine);
+
+    cinder::gl::color(last_color_[0], last_color_[1], last_color_[2]);
+    last_color_time_ = time;
+  } else {
+    cinder::gl::color(last_color_[0], last_color_[1], last_color_[2]);
   }
 
   const Location loc = engine_.GetFood().GetLocation();

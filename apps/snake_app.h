@@ -53,7 +53,8 @@ class SnakeApp : public cinder::app::App {
   const size_t tile_size_;
   size_t time_left_;
   std::vector<snake::Player> top_players_;
-  std::chrono::time_point<std::chrono::system_clock> last_time_color_;
+  std::chrono::time_point<std::chrono::system_clock> last_color_time_;
+  std::vector<double> last_color_;
 };
 
 }  // namespace snakeapp
