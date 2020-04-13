@@ -69,6 +69,7 @@ SnakeApp::SnakeApp()
 void SnakeApp::setup() {
   cinder::gl::enableDepthWrite();
   cinder::gl::enableDepthRead();
+  last_time_color_ = system_clock::now();
 }
 
 void SnakeApp::update() {
@@ -177,10 +178,22 @@ void SnakeApp::DrawGameOver() {
 
   size_t row = 0;
   PrintText("Game Over :(", color, size, center);
+
+  PrintText("Leaderboard", color, size, {center.x - center.x / 2, center.y + (++row) * 50});
   for (const snake::Player& player : top_players_) {
     std::stringstream ss;
     ss << player.name << " - " << player.score;
-    PrintText(ss.str(), color, size, {center.x, center.y + (++row) * 50});
+    PrintText(ss.str(), color, size, {center.x - center.x / 2, center.y + (++row) * 50});
+  }
+
+  row = 0;
+
+  PrintText(player_name_ + "'s Past Scores", color, size, {center.x + center.x / 2, center.y + (++row) * 50});
+  const std::vector<snake::Player>& player_history = leaderboard_.RetrieveHighScores({player_name_, engine_.GetScore()}, kLimit);
+  for (const snake::Player& player : player_history) {
+    std::stringstream ss;
+    ss << player.score;
+    PrintText(ss.str(), color, size, {center.x + center.x / 2, center.y + (++row) * 50});
   }
 
   printed_game_over_ = true;
@@ -206,8 +219,19 @@ void SnakeApp::DrawSnake() const {
   const cinder::vec2 center = getWindowCenter();
 }
 
-void SnakeApp::DrawFood() const {
+void SnakeApp::DrawFood() {
   cinder::gl::color(0, 1, 0);
+  const auto time = system_clock::now();
+
+  if (time - last_time_color_ > std::chrono::seconds(1)) {
+    std::random_device rd;
+    std::default_random_engine engine(rd());
+    std::uniform_int_distribution<> uniform_dist(0, 1);
+
+    cinder::gl::color(uniform_dist(engine), uniform_dist(engine), uniform_dist(engine));
+    last_time_color_ = time;
+  }
+
   const Location loc = engine_.GetFood().GetLocation();
   cinder::gl::drawSolidRect(Rectf(tile_size_ * loc.Row(),
                                   tile_size_ * loc.Col(),
@@ -276,5 +300,4 @@ void SnakeApp::ResetGame() {
   time_left_ = 0;
   top_players_.clear();
 }
-
 }  // namespace snakeapp

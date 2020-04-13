@@ -22,8 +22,10 @@ LeaderBoard::LeaderBoard(const string& db_path) : db_{db_path} {
 }
 
 void LeaderBoard::AddScoreToLeaderBoard(const Player& player) {
-  // TODO(you): Add your query here.
-  db_ << "";
+  db_ << "INSERT INTO leaderboard (name, score)\n"
+         "VALUES (?, ?);"
+      << player.name
+      << player.score;
 }
 
 vector<Player> GetPlayers(sqlite::database_binder* rows) {
@@ -41,15 +43,24 @@ vector<Player> GetPlayers(sqlite::database_binder* rows) {
 }
 
 vector<Player> LeaderBoard::RetrieveHighScores(const size_t limit) {
-  // TODO(you): Add your query here.
-  auto rows = db_ << "";
+  auto rows = db_ << "SELECT name, MAX(score)\n"
+                     "FROM leaderboard\n"
+                     "GROUP BY name\n"
+                     "ORDER BY MAX(score) DESC, name\n"
+                     "LIMIT ?;"
+                     << limit;
   return GetPlayers(&rows);
 }
 
 vector<Player> LeaderBoard::RetrieveHighScores(const Player& player,
                                                const size_t limit) {
-  // TODO(you): Add your query here.
-  auto rows = db_ << "";
+  auto rows = db_ << "SELECT name, score\n"
+                     "FROM leaderboard\n"
+                     "WHERE name = ?\n"
+                     "ORDER BY score DESC, name\n"
+                     "LIMIT ?;"
+                  << player.name
+                  << limit;
   return GetPlayers(&rows);
 }
 

@@ -32,7 +32,7 @@ class SnakeApp : public cinder::app::App {
  private:
   void DrawBackground() const;
   void DrawCountDown() const;
-  void DrawFood() const;
+  void DrawFood();
   void DrawGameOver();
   void DrawSnake() const;
   float PercentageOver() const;
@@ -53,6 +53,7 @@ class SnakeApp : public cinder::app::App {
   const size_t tile_size_;
   size_t time_left_;
   std::vector<snake::Player> top_players_;
+  std::chrono::time_point<std::chrono::system_clock> last_time_color_;
 };
 
 }  // namespace snakeapp
