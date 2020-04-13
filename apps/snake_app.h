@@ -4,9 +4,11 @@
 #define SNAKE_SNAKEAPP_H_
 
 #include <cinder/app/App.h>
+#include <cinder/audio/audio.h>
 #include <cinder/gl/gl.h>
 #include <snake/engine.h>
 #include <snake/leaderboard.h>
+#include <snake/location.h>
 #include <snake/player.h>
 
 #include <random>
@@ -55,6 +57,9 @@ class SnakeApp : public cinder::app::App {
   std::vector<snake::Player> top_players_;
   std::chrono::time_point<std::chrono::system_clock> last_color_time_;
   std::vector<double> last_color_;
+  cinder::audio::VoiceRef background_music_;
+  cinder::audio::VoiceRef eating_sound_;
+  snake::Location last_food_location_;
 };
 
 }  // namespace snakeapp

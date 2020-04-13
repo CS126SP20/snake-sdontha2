@@ -64,17 +64,26 @@ SnakeApp::SnakeApp()
       speed_{FLAGS_speed},
       state_{GameState::kPlaying},
       tile_size_{FLAGS_tilesize},
-      time_left_{0} {}
+      time_left_{0},
+      last_food_location_{engine_.GetFood().GetLocation()} {}
 
 void SnakeApp::setup() {
   cinder::gl::enableDepthWrite();
   cinder::gl::enableDepthRead();
   last_color_time_ = system_clock::now();
   last_color_ = {0, 1, 0};
+
+  cinder::audio::SourceFileRef source_file = cinder::audio::load(cinder::app::loadAsset("lofi-rhodes-chords-melody_155bpm_G#.wav"));
+  background_music_ = cinder::audio::Voice::create(source_file);
+  background_music_->start();
+
+  source_file = cinder::audio::load(cinder::app::loadAsset("Apple_Bite-Simon_Craggs-1683647397.wav"));
+  eating_sound_ = cinder::audio::Voice::create(source_file);
 }
 
 void SnakeApp::update() {
   if (state_ == GameState::kGameOver) {
+    background_music_->stop();
     if (top_players_.empty()) {
       leaderboard_.AddScoreToLeaderBoard({player_name_, engine_.GetScore()});
       top_players_ = leaderboard_.RetrieveHighScores(kLimit);
@@ -83,6 +92,10 @@ void SnakeApp::update() {
       assert(!top_players_.empty());
     }
     return;
+  }
+
+  if (!background_music_->isPlaying()) {
+    background_music_->start();
   }
 
   if (paused_) return;
@@ -189,7 +202,7 @@ void SnakeApp::DrawGameOver() {
 
   row = 0;
 
-  PrintText(player_name_ + "'s Past Scores", color, size, {center.x + center.x / 2, center.y + (++row) * 50});
+  PrintText(player_name_ + "'s Scores", color, size, {center.x + center.x / 2, center.y + (++row) * 50});
   const std::vector<snake::Player>& player_history = leaderboard_.RetrieveHighScores({player_name_, engine_.GetScore()}, kLimit);
   for (const snake::Player& player : player_history) {
     std::stringstream ss;
@@ -226,7 +239,7 @@ void SnakeApp::DrawFood() {
   if (time - last_color_time_ > std::chrono::seconds(1 / engine_.GetScore())) {
     std::random_device rd;
     std::default_random_engine engine(rd());
-    std::uniform_int_distribution<> uniform_dist(0, 1);
+    std::uniform_real_distribution<double> uniform_dist(0, 1);
 
     last_color_[0] = uniform_dist(engine);
     last_color_[1] = uniform_dist(engine);
@@ -239,6 +252,11 @@ void SnakeApp::DrawFood() {
   }
 
   const Location loc = engine_.GetFood().GetLocation();
+  if (last_food_location_ != loc) {
+    eating_sound_->start();
+    last_food_location_ = loc;
+  }
+
   cinder::gl::drawSolidRect(Rectf(tile_size_ * loc.Row(),
                                   tile_size_ * loc.Col(),
                                   tile_size_ * loc.Row() + tile_size_,
