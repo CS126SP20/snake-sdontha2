@@ -37,6 +37,7 @@ class SnakeApp : public cinder::app::App {
   void DrawFood();
   void DrawGameOver();
   void DrawSnake() const;
+  void DrawScore() const;
   float PercentageOver() const;
   void ResetGame();
 

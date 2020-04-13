@@ -141,6 +141,7 @@ void SnakeApp::draw() {
   DrawBackground();
   DrawSnake();
   DrawFood();
+  DrawScore();
   if (state_ == GameState::kCountDown) DrawCountDown();
 }
 
@@ -271,6 +272,17 @@ void SnakeApp::DrawCountDown() const {
   const cinder::vec2 loc = {50, 50};
 
   PrintText(text, color, size, loc);
+}
+
+void SnakeApp::DrawScore() const {
+  const cinder::vec2 center = getWindowCenter();
+  const cinder::ivec2 size = {500, 50};
+  const Color color = Color::white();
+  const cinder::vec2 loc = {center.x, 50};
+
+  std::stringstream ss;
+  ss << engine_.GetScore();
+  PrintText("Score: " + ss.str(), color, size, loc);
 }
 
 void SnakeApp::keyDown(KeyEvent event) {
