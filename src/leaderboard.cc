@@ -24,8 +24,7 @@ LeaderBoard::LeaderBoard(const string& db_path) : db_{db_path} {
 void LeaderBoard::AddScoreToLeaderBoard(const Player& player) {
   db_ << "INSERT INTO leaderboard (name, score)\n"
          "VALUES (?, ?);"
-      << player.name
-      << player.score;
+      << player.name << player.score;
 }
 
 vector<Player> GetPlayers(sqlite::database_binder* rows) {
@@ -48,7 +47,7 @@ vector<Player> LeaderBoard::RetrieveHighScores(const size_t limit) {
                      "GROUP BY name\n"
                      "ORDER BY MAX(score) DESC, name\n"
                      "LIMIT ?;"
-                     << limit;
+                  << limit;
   return GetPlayers(&rows);
 }
 
@@ -59,8 +58,7 @@ vector<Player> LeaderBoard::RetrieveHighScores(const Player& player,
                      "WHERE name = ?\n"
                      "ORDER BY score DESC, name\n"
                      "LIMIT ?;"
-                  << player.name
-                  << limit;
+                  << player.name << limit;
   return GetPlayers(&rows);
 }
 

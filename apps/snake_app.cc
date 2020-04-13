@@ -26,10 +26,10 @@ using cinder::app::KeyEvent;
 using snake::Direction;
 using snake::Location;
 using snake::Segment;
+using std::string;
 using std::chrono::duration_cast;
 using std::chrono::seconds;
 using std::chrono::system_clock;
-using std::string;
 
 const double kRate = 25;
 const size_t kLimit = 3;
@@ -73,11 +73,13 @@ void SnakeApp::setup() {
   last_color_time_ = system_clock::now();
   last_color_ = {0, 1, 0};
 
-  cinder::audio::SourceFileRef source_file = cinder::audio::load(cinder::app::loadAsset("lofi-rhodes-chords-melody_155bpm_G#.wav"));
+  cinder::audio::SourceFileRef source_file = cinder::audio::load(
+      cinder::app::loadAsset("lofi-rhodes-chords-melody_155bpm_G#.wav"));
   background_music_ = cinder::audio::Voice::create(source_file);
   background_music_->start();
 
-  source_file = cinder::audio::load(cinder::app::loadAsset("Apple_Bite-Simon_Craggs-1683647397.wav"));
+  source_file = cinder::audio::load(
+      cinder::app::loadAsset("Apple_Bite-Simon_Craggs-1683647397.wav"));
   eating_sound_ = cinder::audio::Voice::create(source_file);
 }
 
@@ -194,21 +196,27 @@ void SnakeApp::DrawGameOver() {
   size_t row = 0;
   PrintText("Game Over :(", color, size, center);
 
-  PrintText("Leaderboard", color, size, {center.x - center.x / 2, center.y + (++row) * 50});
+  PrintText("Leaderboard", color, size,
+            {center.x - center.x / 2, center.y + (++row) * 50});
   for (const snake::Player& player : top_players_) {
     std::stringstream ss;
     ss << player.name << " - " << player.score;
-    PrintText(ss.str(), color, size, {center.x - center.x / 2, center.y + (++row) * 50});
+    PrintText(ss.str(), color, size,
+              {center.x - center.x / 2, center.y + (++row) * 50});
   }
 
   row = 0;
 
-  PrintText(player_name_ + "'s Scores", color, size, {center.x + center.x / 2, center.y + (++row) * 50});
-  const std::vector<snake::Player>& player_history = leaderboard_.RetrieveHighScores({player_name_, engine_.GetScore()}, kLimit);
+  PrintText(player_name_ + "'s Scores", color, size,
+            {center.x + center.x / 2, center.y + (++row) * 50});
+  const std::vector<snake::Player>& player_history =
+      leaderboard_.RetrieveHighScores({player_name_, engine_.GetScore()},
+                                      kLimit);
   for (const snake::Player& player : player_history) {
     std::stringstream ss;
     ss << player.score;
-    PrintText(ss.str(), color, size, {center.x + center.x / 2, center.y + (++row) * 50});
+    PrintText(ss.str(), color, size,
+              {center.x + center.x / 2, center.y + (++row) * 50});
   }
 
   printed_game_over_ = true;
