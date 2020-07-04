@@ -4,11 +4,15 @@
 #define SNAKE_SNAKEAPP_H_
 
 #include <cinder/app/App.h>
+#include <cinder/app/MouseEvent.h>
 #include <cinder/audio/audio.h>
 #include <cinder/gl/gl.h>
+#include <snake/classifier.h>
 #include <snake/engine.h>
+#include <snake/image.h>
 #include <snake/leaderboard.h>
 #include <snake/location.h>
+#include <snake/model.h>
 #include <snake/player.h>
 
 #include <random>
@@ -30,37 +34,21 @@ class SnakeApp : public cinder::app::App {
   void update() override;
   void draw() override;
   void keyDown(cinder::app::KeyEvent) override;
+  void mouseDrag(cinder::app::MouseEvent event) override;
+  template <typename C>
+  void PrintText(const std::string& text, const C& color,
+                 const cinder::ivec2& size, const cinder::vec2& loc);
 
  private:
-  void DrawBackground() const;
-  void DrawCountDown() const;
-  void DrawFood();
-  void DrawGameOver();
-  void DrawSnake() const;
-  void DrawScore() const;
-  float PercentageOver() const;
-  void ResetGame();
+  std::vector<cinder::vec2> points_;
+  int digit_;
+  bayes::Classifier classifier_;
+  int count;
 
- private:
-  snake::Engine engine_;
-  std::chrono::time_point<std::chrono::system_clock> last_intact_time_;
-  std::chrono::time_point<std::chrono::system_clock> last_pause_time_;
-  std::chrono::time_point<std::chrono::system_clock> last_time_;
-  snake::LeaderBoard leaderboard_;
-  bool paused_;
-  const std::string player_name_;
-  bool printed_game_over_;
-  const size_t size_;
-  const size_t speed_;
-  GameState state_;
-  const size_t tile_size_;
-  size_t time_left_;
-  std::vector<snake::Player> top_players_;
-  std::chrono::time_point<std::chrono::system_clock> last_color_time_;
-  std::vector<double> last_color_;
-  cinder::audio::VoiceRef background_music_;
-  cinder::audio::VoiceRef eating_sound_;
-  snake::Location last_food_location_;
+  void DrawPosition();
+  void DrawPoints();
+  void DrawPad();
+  void DrawGuess();
 };
 
 }  // namespace snakeapp

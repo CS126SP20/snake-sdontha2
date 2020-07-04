@@ -8,12 +8,16 @@
 #include <cinder/gl/draw.h>
 #include <cinder/gl/gl.h>
 #include <gflags/gflags.h>
+#include <snake/classifier.h>
+#include <snake/image.h>
+#include <snake/model.h>
 #include <snake/player.h>
 #include <snake/segment.h>
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <iostream>
 #include <string>
 
 namespace snakeapp {
@@ -23,6 +27,7 @@ using cinder::ColorA;
 using cinder::Rectf;
 using cinder::TextBox;
 using cinder::app::KeyEvent;
+using namespace ci::app;
 using snake::Direction;
 using snake::Location;
 using snake::Segment;
@@ -30,6 +35,11 @@ using std::string;
 using std::chrono::duration_cast;
 using std::chrono::seconds;
 using std::chrono::system_clock;
+
+const int kImageScale = 11;
+const int kImageSize = 28;
+const int kWindowSize = 800;
+const int kMarkerWidth = 16;
 
 const double kRate = 25;
 const size_t kLimit = 3;
@@ -54,104 +64,94 @@ DECLARE_uint32(tilesize);
 DECLARE_uint32(speed);
 DECLARE_string(name);
 
-SnakeApp::SnakeApp()
-    : engine_{FLAGS_size, FLAGS_size},
-      leaderboard_{cinder::app::getAssetPath(kDbPath).string()},
-      paused_{false},
-      player_name_{FLAGS_name},
-      printed_game_over_{false},
-      size_{FLAGS_size},
-      speed_{FLAGS_speed},
-      state_{GameState::kPlaying},
-      tile_size_{FLAGS_tilesize},
-      time_left_{0},
-      last_food_location_{engine_.GetFood().GetLocation()} {}
+SnakeApp::SnakeApp() {}
 
 void SnakeApp::setup() {
-  cinder::gl::enableDepthWrite();
-  cinder::gl::enableDepthRead();
-  last_color_time_ = system_clock::now();
-  last_color_ = {0, 1, 0};
-
-  cinder::audio::SourceFileRef source_file = cinder::audio::load(
-      cinder::app::loadAsset("lofi-rhodes-chords-melody_155bpm_G#.wav"));
-  background_music_ = cinder::audio::Voice::create(source_file);
-  background_music_->start();
-
-  source_file = cinder::audio::load(
-      cinder::app::loadAsset("Apple_Bite-Simon_Craggs-1683647397.wav"));
-  eating_sound_ = cinder::audio::Voice::create(source_file);
+  std::ifstream ifs(
+      "/Users/suchetan/Desktop/Cinder/cinder_0.9.2_mac/my-projects/"
+      "snake-sdontha2/resources/model2.txt");
+  classifier_ = bayes::Classifier(ifs);
 }
 
 void SnakeApp::update() {
-  if (state_ == GameState::kGameOver) {
-    background_music_->stop();
-    if (top_players_.empty()) {
-      leaderboard_.AddScoreToLeaderBoard({player_name_, engine_.GetScore()});
-      top_players_ = leaderboard_.RetrieveHighScores(kLimit);
+  count++;
+  int upper_left = (kWindowSize - kImageSize * kImageScale) / 2;
 
-      // It is crucial the this vector be populated, given that `kLimit` > 0.
-      assert(!top_players_.empty());
+  // all pixels initially unshaded
+  vector<vector<bool>> pixels = vector<vector<bool>>(
+      kImageSize * kImageScale, vector<bool>(kImageSize * kImageScale, false));
+
+  // shade all pixels that mouse dragged over
+  for (const auto& point : points_) {
+    int x = point.x - upper_left;
+    int y = point.y - upper_left;
+    for (int i = std::max(0, x - kMarkerWidth / 2);
+         i < std::min(kImageSize * kImageScale, x + kMarkerWidth / 2); i++) {
+      for (int j = std::max(0, y - kMarkerWidth / 2);
+           j < std::min(kImageSize * kImageScale, y + kMarkerWidth / 2); j++) {
+        pixels[i][j] = true;
+      }
     }
-    return;
   }
 
-  if (!background_music_->isPlaying()) {
-    background_music_->start();
-  }
+  // all pixels are spaces initially
+  vector<vector<char>> scaled_pixels =
+      vector<vector<char>>(kImageSize, vector<char>(kImageSize, ' '));
 
-  if (paused_) return;
-  const auto time = system_clock::now();
+  // scale pixels by kImageScale
+  for (int i = 0; i < kImageSize; i++) {
+    for (int j = 0; j < kImageSize; j++) {
+      int num_shaded = 0;
 
-  if (engine_.GetSnake().IsChopped()) {
-    if (state_ != GameState::kCountDown) {
-      state_ = GameState::kCountDown;
-      last_intact_time_ = time;
+      for (int x = i * kImageScale; x < i * kImageScale + kImageScale; x++) {
+        for (int y = j * kImageScale; y < j * kImageScale + kImageScale; y++) {
+          if (pixels[x][y]) {
+            num_shaded++;
+          }
+        }
+      }
+
+      if (num_shaded > kImageScale * kImageScale / 2) {
+        scaled_pixels[j][i] = '#';
+      }
     }
-
-    // We must be in countdown.
-    const auto time_in_countdown = time - last_intact_time_;
-    if (time_in_countdown >= kCountdownTime) {
-      state_ = GameState::kGameOver;
-    }
-
-    using std::chrono::seconds;
-    const auto time_left_s =
-        duration_cast<seconds>(kCountdownTime - time_in_countdown);
-    time_left_ = static_cast<size_t>(
-        std::min(kCountdownTime.count() - 1, time_left_s.count()));
   }
 
-  if (time - last_time_ > std::chrono::milliseconds(speed_)) {
-    engine_.Step();
-    last_time_ = time;
-  }
+  bayes::Image drawn(scaled_pixels, -1);
+  digit_ = classifier_.Classify(drawn);
 }
 
 void SnakeApp::draw() {
-  cinder::gl::enableAlphaBlending();
+  cinder::gl::clear(Color(0, 0, 0));
 
-  if (state_ == GameState::kGameOver) {
-    if (!printed_game_over_) cinder::gl::clear(Color(1, 0, 0));
-    DrawGameOver();
-    return;
+  DrawPad();
+  DrawPosition();
+  DrawPoints();
+  DrawGuess();
+}
+
+void SnakeApp::keyDown(KeyEvent event) {
+  switch (event.getCode()) {
+    case KeyEvent::KEY_c: {
+      points_.clear();
+    }
   }
+}
 
-  if (paused_) return;
+void SnakeApp::mouseDrag(cinder::app::MouseEvent event) {
+  int upper_left = (kWindowSize - kImageSize * kImageScale) / 2;
+  int bottom_right = upper_left + kImageSize * kImageScale;
+  auto point = event.getPos();
 
-  cinder::gl::clear();
-  DrawBackground();
-  DrawSnake();
-  DrawFood();
-  DrawScore();
-  if (state_ == GameState::kCountDown) DrawCountDown();
+  if ((point.x > upper_left && point.x < bottom_right) &&
+      (point.y > upper_left && point.y < bottom_right)) {
+    points_.emplace_back(point);
+  }
 }
 
 template <typename C>
-void PrintText(const string& text, const C& color, const cinder::ivec2& size,
-               const cinder::vec2& loc) {
-  cinder::gl::color(color);
-
+void SnakeApp::PrintText(const std::string& text, const C& color,
+                         const cinder::ivec2& size, const cinder::vec2& loc) {
   auto box = TextBox()
                  .alignment(TextBox::CENTER)
                  .font(cinder::Font(kNormalFont, 30))
@@ -167,181 +167,57 @@ void PrintText(const string& text, const C& color, const cinder::ivec2& size,
   cinder::gl::draw(texture, locp);
 }
 
-float SnakeApp::PercentageOver() const {
-  if (state_ != GameState::kCountDown) return 0.;
-
-  using std::chrono::milliseconds;
-  const double elapsed_time =
-      duration_cast<milliseconds>(system_clock::now() - last_intact_time_)
-          .count();
-  const double countdown_time = milliseconds(kCountdownTime).count();
-  const double percentage = elapsed_time / countdown_time;
-  return static_cast<float>(percentage);
-}
-
-void SnakeApp::DrawBackground() const {
-  const float percentage = PercentageOver();
-  cinder::gl::clear(Color(percentage, 0, 0));
-}
-
-void SnakeApp::DrawGameOver() {
-  // Lazily print.
-  if (printed_game_over_) return;
-  if (top_players_.empty()) return;
-
+void SnakeApp::DrawPosition() {
   const cinder::vec2 center = getWindowCenter();
-  const cinder::ivec2 size = {500, 50};
-  const Color color = Color::black();
+  const cinder::ivec2 size = {300, 50};
+  const Color color = ColorA::hex(0xFF0000);
 
-  size_t row = 0;
-  PrintText("Game Over :(", color, size, center);
-
-  PrintText("Leaderboard", color, size,
-            {center.x - center.x / 2, center.y + (++row) * 50});
-  for (const snake::Player& player : top_players_) {
-    std::stringstream ss;
-    ss << player.name << " - " << player.score;
-    PrintText(ss.str(), color, size,
-              {center.x - center.x / 2, center.y + (++row) * 50});
-  }
-
-  row = 0;
-
-  PrintText(player_name_ + "'s Scores", color, size,
-            {center.x + center.x / 2, center.y + (++row) * 50});
-  const std::vector<snake::Player>& player_history =
-      leaderboard_.RetrieveHighScores({player_name_, engine_.GetScore()},
-                                      kLimit);
-  for (const snake::Player& player : player_history) {
-    std::stringstream ss;
-    ss << player.score;
-    PrintText(ss.str(), color, size,
-              {center.x + center.x / 2, center.y + (++row) * 50});
-  }
-
-  printed_game_over_ = true;
-}
-
-void SnakeApp::DrawSnake() const {
-  int num_visible = 0;
-  for (const Segment& part : engine_.GetSnake()) {
-    const Location loc = part.GetLocation();
-    if (part.IsVisibile()) {
-      const double opacity = std::exp(-(num_visible++) / kRate);
-      cinder::gl::color(ColorA(0, 0, 1, static_cast<float>(opacity)));
-    } else {
-      const float percentage = PercentageOver();
-      cinder::gl::color(Color(percentage, 0, 0));
-    }
-
-    cinder::gl::drawSolidRect(Rectf(tile_size_ * loc.Row(),
-                                    tile_size_ * loc.Col(),
-                                    tile_size_ * loc.Row() + tile_size_,
-                                    tile_size_ * loc.Col() + tile_size_));
-  }
-  const cinder::vec2 center = getWindowCenter();
-}
-
-void SnakeApp::DrawFood() {
-  const auto time = system_clock::now();
-
-  if (time - last_color_time_ > std::chrono::seconds(1 / engine_.GetScore())) {
-    std::random_device rd;
-    std::default_random_engine engine(rd());
-    std::uniform_real_distribution<double> uniform_dist(0, 1);
-
-    last_color_[0] = uniform_dist(engine);
-    last_color_[1] = uniform_dist(engine);
-    last_color_[2] = uniform_dist(engine);
-
-    cinder::gl::color(last_color_[0], last_color_[1], last_color_[2]);
-    last_color_time_ = time;
-  } else {
-    cinder::gl::color(last_color_[0], last_color_[1], last_color_[2]);
-  }
-
-  const Location loc = engine_.GetFood().GetLocation();
-  if (last_food_location_ != loc) {
-    eating_sound_->start();
-    last_food_location_ = loc;
-  }
-
-  cinder::gl::drawSolidRect(Rectf(tile_size_ * loc.Row(),
-                                  tile_size_ * loc.Col(),
-                                  tile_size_ * loc.Row() + tile_size_,
-                                  tile_size_ * loc.Col() + tile_size_));
-}
-
-void SnakeApp::DrawCountDown() const {
-  const float percentage = PercentageOver();
-  const string text = std::to_string(time_left_);
-  const Color color = {1 - percentage, 0, 0};
-  const cinder::ivec2 size = {50, 50};
-  const cinder::vec2 loc = {50, 50};
-
-  PrintText(text, color, size, loc);
-}
-
-void SnakeApp::DrawScore() const {
-  const cinder::vec2 center = getWindowCenter();
-  const cinder::ivec2 size = {500, 50};
-  const Color color = Color::white();
-  const cinder::vec2 loc = {center.x, 50};
-
+  const cinder::vec2 loc = {center.x + center.x / 2, 50};
   std::stringstream ss;
-  ss << engine_.GetScore();
-  PrintText("Score: " + ss.str(), color, size, loc);
-}
+  if (!points_.empty()) {
+    ss << "(";
+    ss << points_.back().x;
+    ss << ", ";
+    ss << points_.back().y;
+    ss << ")";
 
-void SnakeApp::keyDown(KeyEvent event) {
-  switch (event.getCode()) {
-    case KeyEvent::KEY_UP:
-    case KeyEvent::KEY_k:
-    case KeyEvent::KEY_w: {
-      engine_.SetDirection(Direction::kLeft);
-      break;
-    }
-    case KeyEvent::KEY_DOWN:
-    case KeyEvent::KEY_j:
-    case KeyEvent::KEY_s: {
-      engine_.SetDirection(Direction::kRight);
-      break;
-    }
-    case KeyEvent::KEY_LEFT:
-    case KeyEvent::KEY_h:
-    case KeyEvent::KEY_a: {
-      engine_.SetDirection(Direction::kUp);
-      break;
-    }
-    case KeyEvent::KEY_RIGHT:
-    case KeyEvent::KEY_l:
-    case KeyEvent::KEY_d: {
-      engine_.SetDirection(Direction::kDown);
-      break;
-    }
-    case KeyEvent::KEY_p: {
-      paused_ = !paused_;
-
-      if (paused_) {
-        last_pause_time_ = system_clock::now();
-      } else {
-        last_intact_time_ += system_clock::now() - last_pause_time_;
-      }
-      break;
-    }
-    case KeyEvent::KEY_r: {
-      ResetGame();
-      break;
-    }
+    PrintText("(X, Y): " + ss.str(), color, size, loc);
   }
 }
 
-void SnakeApp::ResetGame() {
-  engine_.Reset();
-  paused_ = false;
-  printed_game_over_ = false;
-  state_ = GameState::kPlaying;
-  time_left_ = 0;
-  top_players_.clear();
+void SnakeApp::DrawPoints() {
+  int upper_left = (kWindowSize - kImageSize * kImageScale) / 2;
+  int bottom_right = upper_left + kImageSize * kImageScale;
+  cinder::gl::color(0, 0, 0);
+
+  for (const auto& point : points_) {
+    int x = point.x;
+    int y = point.y;
+    cinder::gl::drawSolidRect(
+        Rectf(std::max(upper_left, x - kMarkerWidth / 2),
+              std::max(upper_left, y - kMarkerWidth / 2),
+              std::min(bottom_right, x + kMarkerWidth / 2),
+              std::min(bottom_right, y + kMarkerWidth / 2)));
+  }
+}
+
+void SnakeApp::DrawPad() {
+  int upper_left = (kWindowSize - kImageSize * kImageScale) / 2;
+  int bottom_right = upper_left + kImageSize * kImageScale;
+  cinder::gl::color(1, 1, 1);
+  cinder::gl::drawSolidRect(
+      Rectf(upper_left, upper_left, bottom_right, bottom_right));
+}
+
+void SnakeApp::DrawGuess() {
+  const cinder::vec2 center = getWindowCenter();
+  const cinder::ivec2 size = {300, 50};
+  const Color color = ColorA::hex(0xFF0000);
+  cinder::gl::color(1, 0, 0);
+
+  const cinder::vec2 loc = {center.x, 700};
+  std::stringstream ss;
+  ss << digit_;
+  PrintText("Model Guess: " + ss.str(), color, size, loc);
 }
 }  // namespace snakeapp
